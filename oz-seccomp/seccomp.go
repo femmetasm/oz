@@ -8,7 +8,7 @@ import (
 	"path"
 	"syscall"
 
-	"github.com/subgraph/go-seccomp"
+	seccomp "github.com/twtiger/gosecco"
 	"github.com/subgraph/oz"
 
 	"github.com/op/go-logging"
