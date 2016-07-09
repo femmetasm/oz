@@ -287,13 +287,13 @@ var syscalls = []SystemCall{
 	SystemCall{
 		name:        "setsockopt",
 		num:         54,
-		args:        SystemCallArgs{3, 3, 3, 1, 3, 0},
+		args:        SystemCallArgs{3, 3, 3, 2, 3, 0},
 		captureArgs: SystemCallArgs{0, 0, 1, 0, 0, 0},
 	},
 	SystemCall{
 		name: "getsockopt",
 		num:  55,
-		args: SystemCallArgs{3, 3, 3, 1, 2, 0},
+		args: SystemCallArgs{3, 3, 3, 2, 2, 0},
 	},
 	SystemCall{
 		name: "clone",
@@ -414,7 +414,7 @@ var syscalls = []SystemCall{
 	SystemCall{
 		name: "getcwd",
 		num:  79,
-		args: SystemCallArgs{1, 3, 0, 0, 0, 0},
+		args: SystemCallArgs{2, 3, 0, 0, 0, 0},
 	},
 	SystemCall{
 		name: "chdir",
