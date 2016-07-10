@@ -1,3 +1,11 @@
+SOL_SOCKET=1
+SO_REUSEADDR=2
+SO_KEEPALIVE=9
+AF_LOCAL=1
+AF_INET=2
+AF_INET6 = 10
+AF_NETLINK = 16
+ 
 recvmsg:1
 poll:1
 stat:1
@@ -23,7 +31,7 @@ recvfrom:1
 mkdir:1
 eventfd2:1
 uname:1
-socket: arg0 == 1 || arg0 == 2 || arg0 == 10 || arg0 == 16 
+socket: arg0 == AF_LOCAL || arg0 == AF_INET || arg0 == AF_INET6 || arg0 == AF_NETLINK
 lstat:1
 rt_sigaction:1
 connect:1
@@ -42,7 +50,7 @@ bind:1
 getegid:1
 getresuid:1
 shmdt:1
-setsockopt: arg2 == 2 || arg2 == 9 
+setsockopt: (arg1 == SOL_SOCKET && arg2 == SO_REUSEADDR) || (arg1 == SOL_SOCKET && arg2 == SO_KEEPALIVE)
 pipe:1
 geteuid:1
 clone:1
