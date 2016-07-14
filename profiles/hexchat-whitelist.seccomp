@@ -34,7 +34,7 @@ writev:1
 open:1
 read:1
 access:1
-futex: arg1 == (FUTEX_WAKE | FUTEX_PRIVATE_FLAG) || arg1 == (FUTEX_WAIT | FUTEX_PRIVATE_FLAG)
+futex: arg1 == FUTEX_WAKE_PRIVATE || arg1 == FUTEX_WAIT_PRIVATE
 mmap:1
 close:1
 fstat:1
