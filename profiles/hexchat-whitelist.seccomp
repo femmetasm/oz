@@ -91,6 +91,7 @@ nanosleep:1
 set_tid_address:1
 getrlimit:1
 write:1
+sysinfo:1
 unlink:1
 kill:1
 openat:1
