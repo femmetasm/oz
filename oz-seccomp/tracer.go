@@ -14,6 +14,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	cseccomp "github.com/twtiger/gosecco/constants"
+
 	"github.com/subgraph/oz"
 	"github.com/subgraph/oz/fs"
 )
@@ -28,6 +30,89 @@ const (
 )
 
 type SystemCallArgs []int
+
+type SyscallMapper struct {
+	SyscallName string
+	Arg0Prefix string
+	Arg1Prefix string
+	Arg2Prefix string
+	Arg3Prefix string
+}
+
+//var ( AuditLogs = []LogAuditFile {
+
+var ( SyscallMappings = []SyscallMapper {
+	{ SyscallName: "fcntl",		Arg0Prefix: "",		Arg1Prefix: "F_" },
+	{ SyscallName: "socket",	Arg0Prefix: "AF_" },
+	{ SyscallName: "setsockopt",	Arg0Prefix: "SOL_",	Arg1Prefix: "SO_" },
+	{ SyscallName: "prctl",		Arg0Prefix: "PR_" } }
+)
+
+// Get a constant name that begins with a given prefix and maps to a specified numerical value.
+func getConstName(prefix string, number uint) (string) {
+	prefLen := len(prefix)
+
+	for key, val := range cseccomp.AllConstants {
+
+		if len(key) < prefLen {
+			continue
+		}
+
+		if key[:prefLen] == prefix {
+
+			if uint(val) == number {
+				return key
+			}
+
+		}
+
+	}
+
+	return "" 
+}
+
+// Get a constant name that corresponds to a given value paramVal when
+// passed as the value of syscall argument argNo for the specified system call.
+func getConstNameByCall(syscallName string, paramVal uint, argNo uint) (string) {
+
+	if (paramVal > 3) {
+		return fmt.Sprint(argNo)
+	}
+
+	for i := 0; i < len(SyscallMappings); i++ {
+
+		if (SyscallMappings[i].SyscallName != syscallName) {
+			continue
+		}
+
+		argPrefix := SyscallMappings[i].Arg0Prefix
+
+		switch (argNo) {
+			case 0:
+				argPrefix = SyscallMappings[i].Arg0Prefix
+			case 1:
+				argPrefix = SyscallMappings[i].Arg1Prefix
+			case 2:
+				argPrefix = SyscallMappings[i].Arg2Prefix
+			case 3:
+				argPrefix = SyscallMappings[i].Arg3Prefix
+		}
+
+		if len(argPrefix) == 0 {
+			return fmt.Sprint(argNo)
+		}
+
+		res := getConstName(argPrefix, paramVal)
+
+		if len(res) == 0 {
+			return fmt.Sprint(argNo)
+		}
+
+		return res
+	}
+
+	return fmt.Sprint(argNo)
+}
 
 func Tracer() {
 	var train = false
@@ -327,7 +412,9 @@ func Tracer() {
 					if c == call {
 						for a, v := range trainingargs[c] {
 							sc, _ := syscallByNum(call)
-							policyout += fmt.Sprintf("%s:%s\n", sc.name, genArgs(uint(a), (v)))
+							policyout += fmt.Sprintf("%s:%s\n", sc.name, genArgs(sc.name, uint(a), (v)))
+
+
 							done = true
 						}
 					}
@@ -362,10 +449,12 @@ func Tracer() {
 	}
 }
 
-func genArgs(a uint, vals []uint) string {
+func genArgs(scName string, a uint, vals []uint) string {
 	s := ""
 	for idx, x := range vals {
-		s += fmt.Sprintf(" arg%d == %d ", a, x)
+		//s += fmt.Sprintf(" arg%d == %d ", a, x)
+		s += fmt.Sprintf(" arg%d == %s ", a, getConstNameByCall(scName, x, a))
+
 		if idx < len(vals)-1 {
 			s += "||"
 		}
