@@ -61,6 +61,7 @@ var syscalls = []SystemCall{
 		name: "mmap",
 		num:  9,
 		args: SystemCallArgs{3, 3, 3, 3, 3, 3},
+		captureArgs: SystemCallArgs{0, 0, 1, 1, 0, 0},
 	},
 	SystemCall{
 		name: "mprotect",
