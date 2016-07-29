@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path"
+	"strings"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -60,6 +61,23 @@ type SyscallTracker struct {
 	r5 uint
 }
 
+type SyscallTrackingExclusion struct {
+	scname string
+	regno uint
+	constCategory string
+	isMask bool
+	exclusions []string
+}
+
+var SyscallTrackingExclusions = []SyscallTrackingExclusion {
+	{ constCategory: "mmap_prot", regno: 0xff, isMask: true,
+		exclusions: []string { "PROT_READ" } },
+	{ scname: "socket", constCategory: "socket_type", regno: 1, isMask: true,
+		exclusions: []string { "SOCK_NONBLOCK" } } }
+//	{ scname: "socket", constCategory: "socket_family", regno: 0, isMask: false,
+//		exclusions: []string { "AF_UNIX" } } }
+
+
 var SyscallsTracked = make([]SyscallTracker, 0)
 
 var ( SyscallMappings = []SyscallMapper {
@@ -74,6 +92,40 @@ var ( SyscallMappings = []SyscallMapper {
 		Flags: SYSCALL_MAP_ARG2_ISMASK },
 	{ SyscallName: "ioctl",		Arg1Class: "ioctl_code" } }
 )
+
+func isSyscallParamExcluded(scname string, regno uint, category string, constName string) (bool) {
+
+//fmt.Printf("*** checking exclusion: scname = %s, regno = %d, category = %s, const name = %s!\n", scname, regno, category, constName)
+
+	for i := 0; i < len(SyscallTrackingExclusions); i++ {
+
+		if (len(SyscallTrackingExclusions[i].scname) > 0) && (SyscallTrackingExclusions[i].scname != scname) {
+			continue
+		}
+
+		if (SyscallTrackingExclusions[i].regno != 0xff) && (SyscallTrackingExclusions[i].regno != regno) {
+			continue
+		}
+
+		if (len(SyscallTrackingExclusions[i].constCategory) > 0) && (SyscallTrackingExclusions[i].constCategory != category) {
+			continue
+		}
+
+		for j := 0; j < len(SyscallTrackingExclusions[i].exclusions); j++ {
+
+//			if (!SyscallTrackingExclusions[i].isMask) && (constName == SyscallTrackingExclusions[i].exclusions[j]) {
+			if constName == SyscallTrackingExclusions[i].exclusions[j] {
+				return true
+			}
+
+		}
+
+	}
+
+//type SyscallTrackingExclusion struct { scno uint regno uint constCategory string isMask bool exclusions []string
+
+	return false
+}
 
 func getSyscallTrackerRegVal(st SyscallTracker, rno uint) (uint) {
 
@@ -135,6 +187,7 @@ func cmpSyscallTracker(st1 SyscallTracker, st2 SyscallTracker) (int) {
 
 func getSyscallsTracked() (string) {
 	ruleString := ""
+	commentStr := ""
 
 	for i := 0; i < len(SyscallsTracked); i++ {
 		scn, _ := syscallByNum(int(SyscallsTracked[i].scno))
@@ -161,6 +214,11 @@ func getSyscallsTracked() (string) {
 				var valArr = []uint { 0 }
 				valArr[0] = getSyscallTrackerRegVal(SyscallsTracked[i], j)
 				ruleStr := genArgs(scn.name, j, valArr)
+
+				if len(ruleStr) == 0 {
+					commentStr = fmt.Sprintf("# Suppressed tracking of syscall %s, arg%d == %x\n", scn.name, j, valArr[0])
+					continue
+				}
 
 				if first == 0 {
 					ruleString += " && "
@@ -190,14 +248,23 @@ func getSyscallsTracked() (string) {
 			ruleString += " || "
 		}
 
-
 		if (i < len(SyscallsTracked) - 1) && (SyscallsTracked[i+1].scno != SyscallsTracked[i].scno ) {
 			ruleString += "\n"
+
+			if len(commentStr) > 0 {
+				ruleString += commentStr
+				commentStr = ""
+			}
+
 		}
 
 	}
 
 	ruleString += "\n"
+
+	if len(commentStr) > 0 {
+		ruleString += commentStr
+	}
 
 	return ruleString
 }
@@ -316,6 +383,41 @@ func getConstNameByCall(syscallName string, paramVal uint, argNo uint) (string) 
 		if err != nil || len(res) == 0 {
 			return fmt.Sprint(paramVal)
 		}
+
+		isExcluded := false
+
+		if lookupMask == 0 {
+			isExcluded = isSyscallParamExcluded(syscallName, argNo, argPrefix, res)
+		} else {
+			allConsts := strings.Split(res, "|")
+			resNew := ""
+			firstS := true
+
+			for s := 0; s < len(allConsts); s++ {
+
+				isExcluded = isSyscallParamExcluded(syscallName, argNo, argPrefix, allConsts[s])
+
+				if isExcluded {
+					continue
+				}
+
+				if (firstS) {
+					resNew = allConsts[s]
+					firstS = false
+				} else {
+					resNew += "|" + allConsts[s]
+				}
+
+			}
+
+			return resNew
+		}
+
+		if isExcluded {
+			return ""
+		}
+
+//fmt.Println("isExcluded = ", isExcluded)
 
 		return res
 	}
@@ -680,13 +782,26 @@ func Tracer() {
 func genArgs(scName string, a uint, vals []uint) string {
 	s := ""
 	for idx, x := range vals {
+		failed := false
 		//s += fmt.Sprintf(" arg%d == %d ", a, x)
-		s += fmt.Sprintf("arg%d == %s", a, getConstNameByCall(scName, x, a))
+		//s += fmt.Sprintf("arg%d == %s", a, getConstNameByCall(scName, x, a))
+		constName := getConstNameByCall(scName, x, a)
 
-		if idx < len(vals)-1 {
-			s += "||"
+		if len(constName) == 0 {
+			failed = true
 		}
+
+		if !failed {
+			s += fmt.Sprintf("arg%d == %s", a, constName)
+
+			if idx < len(vals)-1 {
+				s += "||"
+			}
+
+		}
+
 	}
+
 	return s
 }
 
