@@ -49,14 +49,15 @@ type SyscallMapper struct {
 }
 
 type SyscallTracker struct {
-	scno uint;
-	rmask uint;
-	r0 uint;
-	r1 uint;
-	r2 uint;
-	r3 uint;
-	r4 uint;
-	r5 uint;
+	scno uint
+	rmask uint
+	nhits uint
+	r0 uint
+	r1 uint
+	r2 uint
+	r3 uint
+	r4 uint
+	r5 uint
 }
 
 var SyscallsTracked = make([]SyscallTracker, 0)
@@ -203,7 +204,7 @@ func getSyscallsTracked() (string) {
 
 func trackSyscall(scno uint, rmask uint, r0 uint, r1 uint, r2 uint, r3 uint, r4 uint, r5 uint) {
 
-	var trackData = SyscallTracker { scno, rmask, r0, r1, r2, r3, r4, r5 }
+	var trackData = SyscallTracker { scno, rmask, 1, r0, r1, r2, r3, r4, r5 }
 
 	if len(SyscallsTracked) == 0 {
 		SyscallsTracked = append(SyscallsTracked, trackData)
@@ -239,6 +240,7 @@ func trackSyscall(scno uint, rmask uint, r0 uint, r1 uint, r2 uint, r3 uint, r4 
 		scEq := cmpSyscallTracker(trackData, SyscallsTracked[i])
 
 		if scEq == 0 {
+			SyscallsTracked[i].nhits++
 			return
 		} else if scEq > 0 {
 			continue
@@ -337,6 +339,18 @@ func Tracer() {
 
 	var args = flag.Args()
 
+	if len(args) == 0 {
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	_, err := os.Stat(args[0])
+
+	if err != nil {
+		log.Error("Error: could not access program: ", err)
+		os.Exit(-1)
+	}
+
 	OzConfig, err := oz.LoadConfig(oz.DefaultConfigPath)
 	if err != nil {
 		log.Error("unable to load oz config")
@@ -405,14 +419,14 @@ func Tracer() {
 			log.Error("Error (wait4) err:%v pid:%i", err, pid)
 		}
 		log.Info("Tracing child pid: %v\n", pid)
-		for done == false {
-			pflags := unix.PTRACE_O_TRACESECCOMP
-			pflags |= unix.PTRACE_O_TRACEFORK
-			pflags |= unix.PTRACE_O_TRACEVFORK
-			pflags |= unix.PTRACE_O_TRACECLONE
-			pflags |= C.PTRACE_O_EXITKILL
+		pflags := unix.PTRACE_O_TRACESECCOMP
+		pflags |= unix.PTRACE_O_TRACEFORK
+		pflags |= unix.PTRACE_O_TRACEVFORK
+		pflags |= unix.PTRACE_O_TRACECLONE
+		pflags |= C.PTRACE_O_EXITKILL
+		syscall.PtraceSetOptions(pid, pflags)
 
-			syscall.PtraceSetOptions(pid, pflags)
+		for done == false {
 			syscall.PtraceCont(pid, 0)
 			pid, err = syscall.Wait4(-1, &s, syscall.WALL, nil)
 			if err != nil {

@@ -1608,7 +1608,7 @@ var syscalls = []SystemCall{
 	SystemCall{
 		name: "seccomp",
 		num:  317,
-		args: SystemCallArgs{3, 3, 1, 0, 0, 0},
+		args: SystemCallArgs{3, 3, 0, 0, 0, 0},
 	},
 	SystemCall{
 		name: "getrandom",
