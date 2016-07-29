@@ -66,6 +66,7 @@ var syscalls = []SystemCall{
 		name: "mprotect",
 		num:  10,
 		args: SystemCallArgs{3, 3, 3, 0, 0, 0},
+		captureArgs: SystemCallArgs{0, 0, 1, 0, 0, 0},
 	},
 	SystemCall{
 		name: "munmap",
@@ -222,7 +223,7 @@ var syscalls = []SystemCall{
 		name:        "socket",
 		num:         41,
 		args:        SystemCallArgs{3, 3, 3, 0, 0, 0},
-		captureArgs: SystemCallArgs{1, 0, 0, 0, 0, 0},
+		captureArgs: SystemCallArgs{1, 1, 1, 0, 0, 0},
 	},
 	SystemCall{
 		name: "connect",
@@ -288,7 +289,7 @@ var syscalls = []SystemCall{
 		name:        "setsockopt",
 		num:         54,
 		args:        SystemCallArgs{3, 3, 3, 2, 3, 0},
-		captureArgs: SystemCallArgs{0, 0, 1, 0, 0, 0},
+		captureArgs: SystemCallArgs{0, 1, 1, 0, 0, 0},
 	},
 	SystemCall{
 		name: "getsockopt",
