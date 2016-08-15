@@ -15,7 +15,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-//	cseccomp "github.com/twtiger/gosecco/constants"
+	//	cseccomp "github.com/twtiger/gosecco/constants"
 	constants "github.com/shw700/constants"
 
 	"github.com/subgraph/oz"
@@ -42,60 +42,61 @@ type SystemCallArgs []int
 
 type SyscallMapper struct {
 	SyscallName string
-	Flags uint
-	Arg0Class string
-	Arg1Class string
-	Arg2Class string
-	Arg3Class string
+	Flags       uint
+	Arg0Class   string
+	Arg1Class   string
+	Arg2Class   string
+	Arg3Class   string
 }
 
 type SyscallTracker struct {
-	scno uint
+	scno  uint
 	rmask uint
 	nhits uint
-	r0 uint
-	r1 uint
-	r2 uint
-	r3 uint
-	r4 uint
-	r5 uint
+	r0    uint
+	r1    uint
+	r2    uint
+	r3    uint
+	r4    uint
+	r5    uint
 }
 
 type SyscallTrackingExclusion struct {
-	scname string
-	regno uint
+	scname        string
+	regno         uint
 	constCategory string
-	isMask bool
-	exclusions []string
+	isMask        bool
+	exclusions    []string
 }
 
-var SyscallTrackingExclusions = []SyscallTrackingExclusion {
-	{ constCategory: "mmap_prot", regno: 0xff, isMask: true,
-		exclusions: []string { "PROT_READ" } },
-	{ scname: "socket", constCategory: "socket_type", regno: 1, isMask: true,
-		exclusions: []string { "SOCK_NONBLOCK" } } }
+var SyscallTrackingExclusions = []SyscallTrackingExclusion{
+	{constCategory: "mmap_prot", regno: 0xff, isMask: true,
+		exclusions: []string{"PROT_READ"}},
+	{scname: "socket", constCategory: "socket_type", regno: 1, isMask: true,
+		exclusions: []string{"SOCK_NONBLOCK"}}}
+
 //	{ scname: "socket", constCategory: "socket_family", regno: 0, isMask: false,
 //		exclusions: []string { "AF_UNIX" } } }
 
-
 var SyscallsTracked = make([]SyscallTracker, 0)
 
-var ( SyscallMappings = []SyscallMapper {
-	{ SyscallName: "fcntl",		Arg1Class: "F_" },
-	{ SyscallName: "socket",	Arg0Class: "socket_family",	Arg1Class: "socket_type",	Arg2Class: "ip_proto",
-		Flags: SYSCALL_MAP_ARG1_ISMASK },
-	{ SyscallName: "setsockopt",	Arg1Class: "setsockopt_level",	Arg2Class: "setsockopt_optname" },
-	{ SyscallName: "prctl",		Arg0Class: "PR_" },
-	{ SyscallName: "mmap",		Arg2Class: "mmap_prot",		Arg3Class: "mmap_flags",
-		Flags: SYSCALL_MAP_ARG2_ISMASK|SYSCALL_MAP_ARG3_ISMASK },
-	{ SyscallName: "mprotect",	Arg2Class: "mmap_prot",
-		Flags: SYSCALL_MAP_ARG2_ISMASK },
-	{ SyscallName: "ioctl",		Arg1Class: "ioctl_code" } }
+var (
+	SyscallMappings = []SyscallMapper{
+		{SyscallName: "fcntl", Arg1Class: "F_"},
+		{SyscallName: "socket", Arg0Class: "socket_family", Arg1Class: "socket_type", Arg2Class: "ip_proto",
+			Flags: SYSCALL_MAP_ARG1_ISMASK},
+		{SyscallName: "setsockopt", Arg1Class: "setsockopt_level", Arg2Class: "setsockopt_optname"},
+		{SyscallName: "prctl", Arg0Class: "PR_"},
+		{SyscallName: "mmap", Arg2Class: "mmap_prot", Arg3Class: "mmap_flags",
+			Flags: SYSCALL_MAP_ARG2_ISMASK | SYSCALL_MAP_ARG3_ISMASK},
+		{SyscallName: "mprotect", Arg2Class: "mmap_prot",
+			Flags: SYSCALL_MAP_ARG2_ISMASK},
+		{SyscallName: "ioctl", Arg1Class: "ioctl_code"}}
 )
 
-func isSyscallParamExcluded(scname string, regno uint, category string, constName string) (bool) {
+func isSyscallParamExcluded(scname string, regno uint, category string, constName string) bool {
 
-//fmt.Printf("*** checking exclusion: scname = %s, regno = %d, category = %s, const name = %s!\n", scname, regno, category, constName)
+	//fmt.Printf("*** checking exclusion: scname = %s, regno = %d, category = %s, const name = %s!\n", scname, regno, category, constName)
 
 	for i := 0; i < len(SyscallTrackingExclusions); i++ {
 
@@ -113,7 +114,7 @@ func isSyscallParamExcluded(scname string, regno uint, category string, constNam
 
 		for j := 0; j < len(SyscallTrackingExclusions[i].exclusions); j++ {
 
-//			if (!SyscallTrackingExclusions[i].isMask) && (constName == SyscallTrackingExclusions[i].exclusions[j]) {
+			//			if (!SyscallTrackingExclusions[i].isMask) && (constName == SyscallTrackingExclusions[i].exclusions[j]) {
 			if constName == SyscallTrackingExclusions[i].exclusions[j] {
 				return true
 			}
@@ -122,36 +123,36 @@ func isSyscallParamExcluded(scname string, regno uint, category string, constNam
 
 	}
 
-//type SyscallTrackingExclusion struct { scno uint regno uint constCategory string isMask bool exclusions []string
+	//type SyscallTrackingExclusion struct { scno uint regno uint constCategory string isMask bool exclusions []string
 
 	return false
 }
 
-func getSyscallTrackerRegVal(st SyscallTracker, rno uint) (uint) {
+func getSyscallTrackerRegVal(st SyscallTracker, rno uint) uint {
 
-	switch(rno) {
-		case 0:
-			return st.r0
-		case 1:
-			return st.r1
-		case 2:
-			return st.r2
-		case 3:
-			return st.r3
-		case 4:
-			return st.r4
-		case 5:
-			return st.r5
+	switch rno {
+	case 0:
+		return st.r0
+	case 1:
+		return st.r1
+	case 2:
+		return st.r2
+	case 3:
+		return st.r3
+	case 4:
+		return st.r4
+	case 5:
+		return st.r5
 	}
 
 	return 0
 }
 
-func cmpSyscallTracker(st1 SyscallTracker, st2 SyscallTracker) (int) {
+func cmpSyscallTracker(st1 SyscallTracker, st2 SyscallTracker) int {
 
-	if (st1.scno > st2.scno) {
+	if st1.scno > st2.scno {
 		return 1
-	} else if (st1.scno < st2.scno) {
+	} else if st1.scno < st2.scno {
 		return -1
 	}
 
@@ -162,15 +163,15 @@ func cmpSyscallTracker(st1 SyscallTracker, st2 SyscallTracker) (int) {
 		var v1 uint = 0
 		var v2 uint = 0
 
-		if (st1.rmask & bitmask == 0) && (st2.rmask & bitmask == 0) {
+		if (st1.rmask&bitmask == 0) && (st2.rmask&bitmask == 0) {
 			continue
 		}
 
-		if st1.rmask & bitmask > 0 {
+		if st1.rmask&bitmask > 0 {
 			v1 = getSyscallTrackerRegVal(st1, i)
 		}
 
-		if st2.rmask & bitmask > 0 {
+		if st2.rmask&bitmask > 0 {
 			v2 = getSyscallTrackerRegVal(st2, i)
 		}
 
@@ -185,7 +186,7 @@ func cmpSyscallTracker(st1 SyscallTracker, st2 SyscallTracker) (int) {
 	return 0
 }
 
-func getSyscallsTracked() (string) {
+func getSyscallsTracked() string {
 	ruleString := ""
 	commentStr := ""
 
@@ -200,7 +201,7 @@ func getSyscallsTracked() (string) {
 			ruleString += scn.name + ": "
 
 			// If we're not the only reference to that syscall number then open a complex expression
-			if (i < len(SyscallsTracked) - 1) && (SyscallsTracked[i+1].scno == SyscallsTracked[i].scno ) {
+			if (i < len(SyscallsTracked)-1) && (SyscallsTracked[i+1].scno == SyscallsTracked[i].scno) {
 				ruleString += "("
 			}
 
@@ -210,8 +211,8 @@ func getSyscallsTracked() (string) {
 
 		for j = 0; j < 6; j++ {
 
-			if SyscallsTracked[i].rmask & (1 << j) > 0 {
-				var valArr = []uint { 0 }
+			if SyscallsTracked[i].rmask&(1<<j) > 0 {
+				var valArr = []uint{0}
 				valArr[0] = getSyscallTrackerRegVal(SyscallsTracked[i], j)
 				ruleStr := genArgs(scn.name, j, valArr)
 
@@ -238,9 +239,9 @@ func getSyscallsTracked() (string) {
 			closed = 1
 		}
 
-		if (i < len(SyscallsTracked) - 1) && (SyscallsTracked[i+1].scno == SyscallsTracked[i].scno ) {
+		if (i < len(SyscallsTracked)-1) && (SyscallsTracked[i+1].scno == SyscallsTracked[i].scno) {
 
-			if (closed == 0) {
+			if closed == 0 {
 				ruleString += ")"
 				closed = 1
 			}
@@ -248,7 +249,7 @@ func getSyscallsTracked() (string) {
 			ruleString += " || "
 		}
 
-		if (i < len(SyscallsTracked) - 1) && (SyscallsTracked[i+1].scno != SyscallsTracked[i].scno ) {
+		if (i < len(SyscallsTracked)-1) && (SyscallsTracked[i+1].scno != SyscallsTracked[i].scno) {
 			ruleString += "\n"
 
 			if len(commentStr) > 0 {
@@ -271,7 +272,7 @@ func getSyscallsTracked() (string) {
 
 func trackSyscall(scno uint, rmask uint, r0 uint, r1 uint, r2 uint, r3 uint, r4 uint, r5 uint) {
 
-	var trackData = SyscallTracker { scno, rmask, 1, r0, r1, r2, r3, r4, r5 }
+	var trackData = SyscallTracker{scno, rmask, 1, r0, r1, r2, r3, r4, r5}
 
 	if len(SyscallsTracked) == 0 {
 		SyscallsTracked = append(SyscallsTracked, trackData)
@@ -279,31 +280,31 @@ func trackSyscall(scno uint, rmask uint, r0 uint, r1 uint, r2 uint, r3 uint, r4 
 	}
 
 	// Might not be necessary but let's just leave out the untracked fields.
-	if rmask & 1 == 0 {
+	if rmask&1 == 0 {
 		trackData.r0 = 0
 	}
 
-	if rmask & (1 << 1) == 0 {
+	if rmask&(1<<1) == 0 {
 		trackData.r1 = 0
 	}
 
-	if rmask & (1 << 2) == 0 {
+	if rmask&(1<<2) == 0 {
 		trackData.r2 = 0
 	}
 
-	if rmask & (1 << 3) == 0 {
+	if rmask&(1<<3) == 0 {
 		trackData.r3 = 0
 	}
 
-	if rmask & (1 << 4) == 0 {
+	if rmask&(1<<4) == 0 {
 		trackData.r4 = 0
 	}
 
-	if rmask & (1 << 5) == 0 {
+	if rmask&(1<<5) == 0 {
 		trackData.r5 = 0
 	}
 
-	for i := 0; i <  len(SyscallsTracked); i++ {
+	for i := 0; i < len(SyscallsTracked); i++ {
 		scEq := cmpSyscallTracker(trackData, SyscallsTracked[i])
 
 		if scEq == 0 {
@@ -325,68 +326,70 @@ func trackSyscall(scno uint, rmask uint, r0 uint, r1 uint, r2 uint, r3 uint, r4 
 
 // Get a constant name that corresponds to a given value paramVal when
 // passed as the value of syscall argument argNo for the specified system call.
-func getConstNameByCall(syscallName string, paramVal uint, argNo uint) (string) {
+// Return the name-as-string (as either a single constant or a bitmask of constants),
+// and return whether or not the string value represents a bitmask, as bool.
+func getConstNameByCall(syscallName string, paramVal uint, argNo uint) (string, bool) {
 
-	if (argNo > 3) {
-		return fmt.Sprint(paramVal)
+	if argNo > 3 {
+		return fmt.Sprint(paramVal), false
 	}
 
 	for i := 0; i < len(SyscallMappings); i++ {
 
-		if (SyscallMappings[i].SyscallName != syscallName) {
+		if SyscallMappings[i].SyscallName != syscallName {
 			continue
 		}
 
 		argPrefix := SyscallMappings[i].Arg0Class
-		lookupMask := 0
+		lookupMask := false
 
-		switch (argNo) {
-			case 0:
-				argPrefix = SyscallMappings[i].Arg0Class
+		switch argNo {
+		case 0:
+			argPrefix = SyscallMappings[i].Arg0Class
 
-				if SyscallMappings[i].Flags & SYSCALL_MAP_ARG0_ISMASK == SYSCALL_MAP_ARG0_ISMASK {
-					lookupMask = 1
-				}
-			case 1:
-				argPrefix = SyscallMappings[i].Arg1Class
+			if SyscallMappings[i].Flags&SYSCALL_MAP_ARG0_ISMASK == SYSCALL_MAP_ARG0_ISMASK {
+				lookupMask = true
+			}
+		case 1:
+			argPrefix = SyscallMappings[i].Arg1Class
 
-				if SyscallMappings[i].Flags & SYSCALL_MAP_ARG1_ISMASK == SYSCALL_MAP_ARG1_ISMASK {
-					lookupMask = 1
-				}
-			case 2:
-				argPrefix = SyscallMappings[i].Arg2Class
+			if SyscallMappings[i].Flags&SYSCALL_MAP_ARG1_ISMASK == SYSCALL_MAP_ARG1_ISMASK {
+				lookupMask = true
+			}
+		case 2:
+			argPrefix = SyscallMappings[i].Arg2Class
 
-				if SyscallMappings[i].Flags & SYSCALL_MAP_ARG2_ISMASK == SYSCALL_MAP_ARG2_ISMASK {
-					lookupMask = 1
-				}
-			case 3:
-				argPrefix = SyscallMappings[i].Arg3Class
+			if SyscallMappings[i].Flags&SYSCALL_MAP_ARG2_ISMASK == SYSCALL_MAP_ARG2_ISMASK {
+				lookupMask = true
+			}
+		case 3:
+			argPrefix = SyscallMappings[i].Arg3Class
 
-				if SyscallMappings[i].Flags & SYSCALL_MAP_ARG3_ISMASK == SYSCALL_MAP_ARG3_ISMASK {
-					lookupMask = 1
-				}
+			if SyscallMappings[i].Flags&SYSCALL_MAP_ARG3_ISMASK == SYSCALL_MAP_ARG3_ISMASK {
+				lookupMask = true
+			}
 		}
 
 		if len(argPrefix) == 0 {
-			return fmt.Sprint(paramVal)
+			return fmt.Sprint(paramVal), lookupMask
 		}
 
 		res := ""
 		err := error(nil)
 
-		if lookupMask == 0 {
+		if !lookupMask {
 			res, err = constants.GetConstByNo(argPrefix, paramVal)
 		} else {
 			res, err = constants.GetConstByBitmask(argPrefix, paramVal)
 		}
 
 		if err != nil || len(res) == 0 {
-			return fmt.Sprint(paramVal)
+			return fmt.Sprint(paramVal), lookupMask
 		}
 
 		isExcluded := false
 
-		if lookupMask == 0 {
+		if !lookupMask {
 			isExcluded = isSyscallParamExcluded(syscallName, argNo, argPrefix, res)
 		} else {
 			allConsts := strings.Split(res, "|")
@@ -401,7 +404,7 @@ func getConstNameByCall(syscallName string, paramVal uint, argNo uint) (string) 
 					continue
 				}
 
-				if (firstS) {
+				if firstS {
 					resNew = allConsts[s]
 					firstS = false
 				} else {
@@ -410,19 +413,19 @@ func getConstNameByCall(syscallName string, paramVal uint, argNo uint) (string) 
 
 			}
 
-			return resNew
+			return resNew, lookupMask
 		}
 
 		if isExcluded {
-			return ""
+			return "", lookupMask
 		}
 
-//fmt.Println("isExcluded = ", isExcluded)
+		//fmt.Println("isExcluded = ", isExcluded)
 
-		return res
+		return res, lookupMask
 	}
 
-	return fmt.Sprint(paramVal)
+	return fmt.Sprint(paramVal), false
 }
 
 func Tracer() {
@@ -585,7 +588,7 @@ func Tracer() {
 
 						for c, i := range systemcall.captureArgs {
 							if i == 1 {
-							rmask |= (uint(1) << uint(c))
+								rmask |= (uint(1) << uint(c))
 								if trainingargs[getSyscallNumber(regs)] == nil {
 									trainingargs[getSyscallNumber(regs)] = make(map[int][]uint)
 								}
@@ -785,14 +788,19 @@ func genArgs(scName string, a uint, vals []uint) string {
 		failed := false
 		//s += fmt.Sprintf(" arg%d == %d ", a, x)
 		//s += fmt.Sprintf("arg%d == %s", a, getConstNameByCall(scName, x, a))
-		constName := getConstNameByCall(scName, x, a)
+		constName, mask := getConstNameByCall(scName, x, a)
 
 		if len(constName) == 0 {
 			failed = true
 		}
 
 		if !failed {
-			s += fmt.Sprintf("arg%d == %s", a, constName)
+
+			if mask {
+				s += fmt.Sprintf("arg%d &? %s", a, constName)
+			} else {
+				s += fmt.Sprintf("arg%d == %s", a, constName)
+			}
 
 			if idx < len(vals)-1 {
 				s += "||"
