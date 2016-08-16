@@ -193,6 +193,8 @@ func cmpSyscallTracker(st1 SyscallTracker, st2 SyscallTracker) int {
 func dumpSyscallsTrackedRaw() string {
 	ruleString := ""
 
+	ruleString += fmt.Sprintf("There are %d syscalls tracked total.\n", len(SyscallsTracked))
+
 	for i := 0; i < len(SyscallsTracked); i++ {
 		scn, _ := syscallByNum(int(SyscallsTracked[i].scno))
 
@@ -206,6 +208,10 @@ func dumpSyscallsTrackedRaw() string {
 
 			if SyscallsTracked[i].rmask&(1<<j) > 0 {
 				ruleString += "   " + "arg" + strconv.Itoa(int(j)) + " == " + strconv.Itoa(int(getSyscallTrackerRegVal(SyscallsTracked[i], j)))
+				var valArr = []uint{0}
+                                valArr[0] = getSyscallTrackerRegVal(SyscallsTracked[i], j)
+                                argStr := genArgs(scn.name, j, valArr)
+				ruleString += "(" + argStr + ")"
 			}
 
 		}
@@ -376,24 +382,52 @@ func trackSyscall(scno uint, rmask uint, r0 uint, r1 uint, r2 uint, r3 uint, r4 
 }
 
 func collapseMatchingBitmasks() {
+	firstIdx := 0
 
-	for i := 1; i < len(SyscallsTracked); i++ {
+	for i := 1; i < len(SyscallsTracked)+1; i++ {
 
-		if maskValueMatches(SyscallsTracked[i-1], SyscallsTracked[i]) {
-			SyscallsTracked[i-1].nhits += SyscallsTracked[i].nhits
-			SyscallsTracked = append(SyscallsTracked[:i], SyscallsTracked[i+1:]...)
-			i--
-		} else if maskValueMatches(SyscallsTracked[i], SyscallsTracked[i-1]) {
-			SyscallsTracked[i].nhits += SyscallsTracked[i-1].nhits
-			SyscallsTracked = append(SyscallsTracked[:i-1], SyscallsTracked[i:]...)
-			i--
+		if (i == len(SyscallsTracked)) || (SyscallsTracked[i].scno != SyscallsTracked[firstIdx].scno) {
+
+			if (((i-1) - firstIdx) < 2) {
+				firstIdx = i
+				continue
+			}
+
+			for j := firstIdx; j < i-1; j++ {
+
+				for k := j+1; k < i; k++ {
+
+					if maskValueMatches(SyscallsTracked[j], SyscallsTracked[k], false) {
+						SyscallsTracked[j].nhits += SyscallsTracked[k].nhits
+						SyscallsTracked = append(SyscallsTracked[:k], SyscallsTracked[k+1:]...)
+						k = i
+						j = i
+						i = 0
+						firstIdx = 0
+						break
+					} else if maskValueMatches(SyscallsTracked[k], SyscallsTracked[j], false) {
+						SyscallsTracked[k].nhits += SyscallsTracked[j].nhits
+						SyscallsTracked = append(SyscallsTracked[:j], SyscallsTracked[j+1:]...)
+						k = i
+						j = i
+						i = 0
+						firstIdx = 0
+						break
+					}
+
+				}
+
+			}
+
+			firstIdx = i
 		}
 
 	}
 
+	return
 }
 
-func maskValueMatches(st1 SyscallTracker, st2 SyscallTracker) (bool) {
+func maskValueMatches(st1 SyscallTracker, st2 SyscallTracker, zero bool) (bool) {
 
 	if st1.scno != st2.scno {
 		return false
@@ -446,6 +480,8 @@ func maskValueMatches(st1 SyscallTracker, st2 SyscallTracker) (bool) {
 		if !tryMask && (v1 != v2) {
 			return false
 		} else if tryMask && (v1 & v2 != v2) {
+			return false
+		} else if tryMask && !zero && (v2 == 0) {
 			return false
 		}
 
@@ -885,6 +921,7 @@ func Tracer() {
 					policyout += fmt.Sprintf("%s:1\n", sc.name)
 				}
 			}
+
 			//policyout += "\n\n" + dumpSyscallsTrackedRaw() + "\n"
 			collapseMatchingBitmasks()
 			policyout += getSyscallsTracked()
