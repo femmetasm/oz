@@ -193,7 +193,7 @@ func cmpSyscallTracker(st1 SyscallTracker, st2 SyscallTracker) int {
 func dumpSyscallsTrackedRaw() string {
 	ruleString := ""
 
-	ruleString += fmt.Sprintf("There are %d syscalls tracked total.\n", len(SyscallsTracked))
+	ruleString += fmt.Sprintf("# There were %d complex syscalls tracked in total.\n", len(SyscallsTracked))
 
 	for i := 0; i < len(SyscallsTracked); i++ {
 		scn, _ := syscallByNum(int(SyscallsTracked[i].scno))
@@ -202,7 +202,7 @@ func dumpSyscallsTrackedRaw() string {
 
 		// If we're a new syscall, print the name.
 //		if (i == 0) || (SyscallsTracked[i].scno != SyscallsTracked[i-1].scno) {
-			ruleString += scn.name + ": "
+			ruleString += "# " + scn.name + ": "
 
 		for j = 0; j < 6; j++ {
 
@@ -210,8 +210,12 @@ func dumpSyscallsTrackedRaw() string {
 				ruleString += "   " + "arg" + strconv.Itoa(int(j)) + " == " + strconv.Itoa(int(getSyscallTrackerRegVal(SyscallsTracked[i], j)))
 				var valArr = []uint{0}
                                 valArr[0] = getSyscallTrackerRegVal(SyscallsTracked[i], j)
-                                argStr := genArgs(scn.name, j, valArr)
-				ruleString += "(" + argStr + ")"
+                                argStr := genArgs(scn.name, j, valArr, false)
+
+				if len(argStr) > 0 {
+					ruleString += "[" + argStr + "]"
+				}
+
 			}
 
 		}
@@ -244,7 +248,7 @@ func getSyscallsTracked() string {
 			if SyscallsTracked[i].rmask&(1<<j) > 0 {
 				var valArr = []uint{0}
 				valArr[0] = getSyscallTrackerRegVal(SyscallsTracked[i], j)
-				ruleStr := genArgs(scn.name, j, valArr)
+				ruleStr := genArgs(scn.name, j, valArr, true)
 
 				if len(ruleStr) == 0 {
 					commentStr = fmt.Sprintf("# Suppressed tracking of syscall %s, arg%d == %x\n", scn.name, j, valArr[0])
@@ -594,17 +598,40 @@ func getConstNameByCall(syscallName string, paramVal uint, argNo uint) (string, 
 	return fmt.Sprint(paramVal), false
 }
 
+var tracerProgName = ""
+
+func usage() {
+	fmt.Fprintln(os.Stderr, "Usage: " + tracerProgName + " [-d] [-t / -x] [-o outfile] [-a] [-v] <cmd> <cmdargs ...>     where")
+	fmt.Fprintln(os.Stderr, "-d / -debug:   turns on debug mode,")
+	fmt.Fprintln(os.Stderr, "-t / -train:   enables training mode (default is to read profile in through stdin),")
+	fmt.Fprintln(os.Stderr, "-x / -vtrain:  enables verbose training mode,")
+	fmt.Fprintln(os.Stderr, "-o / -output:  specifies a file to which the learned seccomp rules will be written,")
+	fmt.Fprintln(os.Stderr, "-a / -append:  ensures that rules will be appended to a policy file,")
+	fmt.Fprintln(os.Stderr, "-v / -verbose: all rules will be generated with additional commentary.")
+}
+
 func Tracer() {
 	var train = false
 	var cmd string
 	var cmdArgs []string
 	var p *oz.Profile
 
+	tracerProgName = os.Args[0]
+
 	var noprofile = flag.Bool("train", false, "Training mode")
-	var debug = flag.Bool("debug", false, "Debug")
+	flag.BoolVar(noprofile, "t", false, "Training mode")
+	var debug = flag.Bool("debug", false, "Debug mode")
+	flag.BoolVar(debug, "d", false, "Debug mode")
 	var appendpolicy = flag.Bool("append", false, "Append to existing policy if exists")
-	var verbosetrain = flag.Bool("verbosetrain", false, "Verbose training output")
+	flag.BoolVar(appendpolicy, "a", false, "Append to existing policy if exists")
+	var verbosetrain = flag.Bool("vtrain", false, "Verbose training output")
+	flag.BoolVar(verbosetrain, "x", false, "Verbose training output")
 	var trainingoutput = flag.String("output", "", "Training policy output file")
+	flag.StringVar(trainingoutput, "o", "", "Training policy output file")
+	var verbose = flag.Bool("verbose", false, "Verbose policy output")
+	flag.BoolVar(verbose, "v", false, "Verbose policy output")
+
+	flag.Usage = usage;
 
 	flag.Parse()
 
@@ -637,6 +664,7 @@ func Tracer() {
 		cmdArgs = append([]string{"-mode=train"}, args...)
 	} else {
 		p = new(oz.Profile)
+		fmt.Fprintln(os.Stderr, "Expecting input as json data from stdin ...")
 		if err := json.NewDecoder(os.Stdin).Decode(&p); err != nil {
 			log.Error("unable to decode profile data: %v", err)
 			os.Exit(1)
@@ -922,7 +950,10 @@ func Tracer() {
 				}
 			}
 
-			//policyout += "\n\n" + dumpSyscallsTrackedRaw() + "\n"
+			if *verbose {
+				policyout += "\n# Raw system call data:\n" + dumpSyscallsTrackedRaw() + "\n"
+			}
+
 			collapseMatchingBitmasks()
 			policyout += getSyscallsTracked()
 			policyout += fmt.Sprintf("execve:1")
@@ -951,7 +982,7 @@ func Tracer() {
 	}
 }
 
-func genArgs(scName string, a uint, vals []uint) string {
+func genArgs(scName string, a uint, vals []uint, warg bool) string {
 	s := ""
 	for idx, x := range vals {
 		failed := false
@@ -965,10 +996,16 @@ func genArgs(scName string, a uint, vals []uint) string {
 
 		if !failed {
 
-			if mask && (strings.Index(constName, "|") != -1) {
-				s += fmt.Sprintf("arg%d &? %s", a, constName)
+			if !warg {
+				s += constName
 			} else {
-				s += fmt.Sprintf("arg%d == %s", a, constName)
+
+				if mask && (strings.Index(constName, "|") != -1) {
+					s += fmt.Sprintf("arg%d &? %s", a, constName)
+				} else {
+					s += fmt.Sprintf("arg%d == %s", a, constName)
+				}
+
 			}
 
 			if idx < len(vals)-1 {
