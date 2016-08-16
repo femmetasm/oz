@@ -10,9 +10,9 @@ import (
 	"os/exec"
 	"os/user"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
-	"strconv"
 
 	"golang.org/x/sys/unix"
 
@@ -201,16 +201,16 @@ func dumpSyscallsTrackedRaw() string {
 		var j uint = 0
 
 		// If we're a new syscall, print the name.
-//		if (i == 0) || (SyscallsTracked[i].scno != SyscallsTracked[i-1].scno) {
-			ruleString += "# " + scn.name + ": "
+		//		if (i == 0) || (SyscallsTracked[i].scno != SyscallsTracked[i-1].scno) {
+		ruleString += fmt.Sprintf("# %s [%d]: ", scn.name, SyscallsTracked[i].nhits)
 
 		for j = 0; j < 6; j++ {
 
 			if SyscallsTracked[i].rmask&(1<<j) > 0 {
 				ruleString += "   " + "arg" + strconv.Itoa(int(j)) + " == " + strconv.Itoa(int(getSyscallTrackerRegVal(SyscallsTracked[i], j)))
 				var valArr = []uint{0}
-                                valArr[0] = getSyscallTrackerRegVal(SyscallsTracked[i], j)
-                                argStr := genArgs(scn.name, j, valArr, false)
+				valArr[0] = getSyscallTrackerRegVal(SyscallsTracked[i], j)
+				argStr := genArgs(scn.name, j, valArr, true, false)
 
 				if len(argStr) > 0 {
 					ruleString += "[" + argStr + "]"
@@ -226,13 +226,18 @@ func dumpSyscallsTrackedRaw() string {
 	return ruleString
 }
 
-func getSyscallsTracked() string {
+func getSyscallsTracked(scname string) string {
 	ruleString := ""
 	ruleStringTmp := ""
 	commentStr := ""
+	condPrefix := ""
 
 	for i := 0; i < len(SyscallsTracked); i++ {
 		scn, _ := syscallByNum(int(SyscallsTracked[i].scno))
+
+		if (len(scname) > 0) && (scname != scn.name) {
+			continue
+		}
 
 		var j uint = 0
 		first := true
@@ -248,10 +253,12 @@ func getSyscallsTracked() string {
 			if SyscallsTracked[i].rmask&(1<<j) > 0 {
 				var valArr = []uint{0}
 				valArr[0] = getSyscallTrackerRegVal(SyscallsTracked[i], j)
-				ruleStr := genArgs(scn.name, j, valArr, true)
+				ruleStr := genArgs(scn.name, j, valArr, true, true)
 
 				if len(ruleStr) == 0 {
-					commentStr = fmt.Sprintf("# Suppressed tracking of syscall %s, arg%d == %x\n", scn.name, j, valArr[0])
+					ruleStr = genArgs(scn.name, j, valArr, false, false)
+					commentStr = fmt.Sprintf("# Suppressed tracking of syscall %s, arg%d == %x[%s]\n", scn.name, j, valArr[0], ruleStr)
+					condPrefix = ""
 					continue
 				}
 
@@ -261,11 +268,13 @@ func getSyscallsTracked() string {
 
 					// If we're not the only reference to that syscall number then open a complex expression
 					if (i < len(SyscallsTracked)-1) && (SyscallsTracked[i+1].scno == SyscallsTracked[i].scno) {
-						ruleStringTmp += "("
+						ruleStringTmp += condPrefix + "("
+						condPrefix = ""
 					}
 
 				} else if first && (i > 0) && (SyscallsTracked[i].scno == SyscallsTracked[i-1].scno) {
-					ruleStringTmp += "("
+					ruleStringTmp += condPrefix + "("
+					condPrefix = ""
 				}
 
 				if !first {
@@ -302,7 +311,7 @@ func getSyscallsTracked() string {
 			}
 
 			if !empty {
-				ruleStringTmp += " || "
+				condPrefix = " || "
 			}
 
 		}
@@ -326,7 +335,10 @@ func getSyscallsTracked() string {
 	}
 
 	ruleString += ruleStringTmp
-	ruleString += "\n"
+
+	if ruleString[len(ruleString)-1] != '\n' {
+		ruleString += "\n"
+	}
 
 	return ruleString
 }
@@ -392,14 +404,14 @@ func collapseMatchingBitmasks() {
 
 		if (i == len(SyscallsTracked)) || (SyscallsTracked[i].scno != SyscallsTracked[firstIdx].scno) {
 
-			if (((i-1) - firstIdx) < 2) {
+			if ((i - 1) - firstIdx) < 2 {
 				firstIdx = i
 				continue
 			}
 
 			for j := firstIdx; j < i-1; j++ {
 
-				for k := j+1; k < i; k++ {
+				for k := j + 1; k < i; k++ {
 
 					if maskValueMatches(SyscallsTracked[j], SyscallsTracked[k], false) {
 						SyscallsTracked[j].nhits += SyscallsTracked[k].nhits
@@ -431,7 +443,7 @@ func collapseMatchingBitmasks() {
 	return
 }
 
-func maskValueMatches(st1 SyscallTracker, st2 SyscallTracker, zero bool) (bool) {
+func maskValueMatches(st1 SyscallTracker, st2 SyscallTracker, zero bool) bool {
 
 	if st1.scno != st2.scno {
 		return false
@@ -443,7 +455,7 @@ func maskValueMatches(st1 SyscallTracker, st2 SyscallTracker, zero bool) (bool) 
 
 	for mapIdx = 0; mapIdx < len(SyscallMappings); mapIdx++ {
 
-		if (SyscallMappings[mapIdx].SyscallName == sc.name) {
+		if SyscallMappings[mapIdx].SyscallName == sc.name {
 			break
 		}
 
@@ -463,13 +475,13 @@ func maskValueMatches(st1 SyscallTracker, st2 SyscallTracker, zero bool) (bool) 
 			continue
 		}
 
-		if (i == 0) && (SyscallMappings[mapIdx].Flags & SYSCALL_MAP_ARG0_ISMASK != SYSCALL_MAP_ARG0_ISMASK) {
+		if (i == 0) && (SyscallMappings[mapIdx].Flags&SYSCALL_MAP_ARG0_ISMASK != SYSCALL_MAP_ARG0_ISMASK) {
 			tryMask = false
-		} else if (i == 1) && (SyscallMappings[mapIdx].Flags & SYSCALL_MAP_ARG1_ISMASK != SYSCALL_MAP_ARG1_ISMASK) {
+		} else if (i == 1) && (SyscallMappings[mapIdx].Flags&SYSCALL_MAP_ARG1_ISMASK != SYSCALL_MAP_ARG1_ISMASK) {
 			tryMask = false
-		} else if (i == 2) && (SyscallMappings[mapIdx].Flags & SYSCALL_MAP_ARG2_ISMASK != SYSCALL_MAP_ARG2_ISMASK) {
+		} else if (i == 2) && (SyscallMappings[mapIdx].Flags&SYSCALL_MAP_ARG2_ISMASK != SYSCALL_MAP_ARG2_ISMASK) {
 			tryMask = false
-		} else if (i == 3) && (SyscallMappings[mapIdx].Flags & SYSCALL_MAP_ARG3_ISMASK != SYSCALL_MAP_ARG3_ISMASK) {
+		} else if (i == 3) && (SyscallMappings[mapIdx].Flags&SYSCALL_MAP_ARG3_ISMASK != SYSCALL_MAP_ARG3_ISMASK) {
 			tryMask = false
 		}
 
@@ -483,7 +495,7 @@ func maskValueMatches(st1 SyscallTracker, st2 SyscallTracker, zero bool) (bool) 
 
 		if !tryMask && (v1 != v2) {
 			return false
-		} else if tryMask && (v1 & v2 != v2) {
+		} else if tryMask && (v1&v2 != v2) {
 			return false
 		} else if tryMask && !zero && (v2 == 0) {
 			return false
@@ -498,7 +510,7 @@ func maskValueMatches(st1 SyscallTracker, st2 SyscallTracker, zero bool) (bool) 
 // passed as the value of syscall argument argNo for the specified system call.
 // Return the name-as-string (as either a single constant or a bitmask of constants),
 // and return whether or not the string value represents a bitmask, as bool.
-func getConstNameByCall(syscallName string, paramVal uint, argNo uint) (string, bool) {
+func getConstNameByCall(syscallName string, paramVal uint, argNo uint, exclude bool) (string, bool) {
 
 	if argNo > 3 {
 		return fmt.Sprint(paramVal), false
@@ -560,7 +572,11 @@ func getConstNameByCall(syscallName string, paramVal uint, argNo uint) (string, 
 		isExcluded := false
 
 		if !lookupMask {
-			isExcluded = isSyscallParamExcluded(syscallName, argNo, argPrefix, res)
+
+			if exclude {
+				isExcluded = isSyscallParamExcluded(syscallName, argNo, argPrefix, res)
+			}
+
 		} else {
 			allConsts := strings.Split(res, "|")
 			resNew := ""
@@ -568,7 +584,9 @@ func getConstNameByCall(syscallName string, paramVal uint, argNo uint) (string, 
 
 			for s := 0; s < len(allConsts); s++ {
 
-				isExcluded = isSyscallParamExcluded(syscallName, argNo, argPrefix, allConsts[s])
+				if (exclude) {
+					isExcluded = isSyscallParamExcluded(syscallName, argNo, argPrefix, allConsts[s])
+				}
 
 				if isExcluded {
 					continue
@@ -601,7 +619,7 @@ func getConstNameByCall(syscallName string, paramVal uint, argNo uint) (string, 
 var tracerProgName = ""
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "Usage: " + tracerProgName + " [-d] [-t / -x] [-o outfile] [-a] [-v] <cmd> <cmdargs ...>     where")
+	fmt.Fprintln(os.Stderr, "Usage: "+tracerProgName+" [-d] [-t / -x] [-o outfile] [-a] [-v] <cmd> <cmdargs ...>     where")
 	fmt.Fprintln(os.Stderr, "-d / -debug:   turns on debug mode,")
 	fmt.Fprintln(os.Stderr, "-t / -train:   enables training mode (default is to read profile in through stdin),")
 	fmt.Fprintln(os.Stderr, "-x / -vtrain:  enables verbose training mode,")
@@ -631,7 +649,7 @@ func Tracer() {
 	var verbose = flag.Bool("verbose", false, "Verbose policy output")
 	flag.BoolVar(verbose, "v", false, "Verbose policy output")
 
-	flag.Usage = usage;
+	flag.Usage = usage
 
 	flag.Parse()
 
@@ -929,6 +947,8 @@ func Tracer() {
 				}
 			}
 			policyout := ""
+
+			collapseMatchingBitmasks()
 			sk := sortedKeys(freqcount)
 			if *verbosetrain == true {
 				fmt.Println("\nInvocation counts for observed system calls:\n")
@@ -947,16 +967,17 @@ func Tracer() {
 				if done == false {
 					sc, _ := syscallByNum(call)
 					policyout += fmt.Sprintf("%s:1\n", sc.name)
+				} else {
+					policyout += getSyscallsTracked(sc.name)
 				}
 			}
+
+			policyout += fmt.Sprintf("execve:1")
 
 			if *verbose {
 				policyout += "\n# Raw system call data:\n" + dumpSyscallsTrackedRaw() + "\n"
 			}
 
-			collapseMatchingBitmasks()
-			policyout += getSyscallsTracked()
-			policyout += fmt.Sprintf("execve:1")
 			if *verbosetrain == true {
 				fmt.Println("\nTrainer generated seccomp-bpf whitelist policy:\n")
 				fmt.Println(policyout)
@@ -982,13 +1003,11 @@ func Tracer() {
 	}
 }
 
-func genArgs(scName string, a uint, vals []uint, warg bool) string {
+func genArgs(scName string, a uint, vals []uint, exclude bool, warg bool) string {
 	s := ""
 	for idx, x := range vals {
 		failed := false
-		//s += fmt.Sprintf(" arg%d == %d ", a, x)
-		//s += fmt.Sprintf("arg%d == %s", a, getConstNameByCall(scName, x, a))
-		constName, mask := getConstNameByCall(scName, x, a)
+		constName, mask := getConstNameByCall(scName, x, a, exclude)
 
 		if len(constName) == 0 {
 			failed = true
