@@ -258,6 +258,7 @@ func getSyscallsTracked(scname string) string {
 				if len(ruleStr) == 0 {
 					ruleStr = genArgs(scn.name, j, valArr, false, false)
 					commentStr = fmt.Sprintf("# Suppressed tracking of syscall %s, arg%d == %x[%s]\n", scn.name, j, valArr[0], ruleStr)
+					ruleStringTmp += condPrefix
 					condPrefix = ""
 					continue
 				}
