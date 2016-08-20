@@ -355,7 +355,7 @@ var syscalls = []SystemCall{
 	SystemCall{
 		name: "shmdt",
 		num:  67,
-		args: SystemCallArgs{STRINGARG, 0, 0, 0, 0, 0},
+		args: SystemCallArgs{PTRARG, 0, 0, 0, 0, 0},
 	},
 	SystemCall{
 		name: "msgget",
