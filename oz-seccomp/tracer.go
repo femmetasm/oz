@@ -17,7 +17,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	//	cseccomp "github.com/twtiger/gosecco/constants"
-	constants "github.com/shw700/constants"
+	constants "github.com/subgraph/constants"
 
 	"github.com/subgraph/oz"
 	"github.com/subgraph/oz/fs"
