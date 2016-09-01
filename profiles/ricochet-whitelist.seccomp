@@ -95,6 +95,7 @@ shmctl:1
 mremap:1
 inotify_add_watch:1
 gettid:1
+restart_syscall:1
 umask:1
 madvise:1
 capget:1
