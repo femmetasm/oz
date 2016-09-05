@@ -55,7 +55,7 @@ fcntl: (arg1 == F_DUPFD) || (arg1 == F_GETFD) || (arg1 == F_SETFD) || (arg1 == F
 getdents:1
 sendmsg:1
 uname:1
-socket: (arg0 == AF_UNIX || arg1 &? SOCK_STREAM && arg2 == IPPROTO_IP) || (arg0 == AF_INET || arg1 &? SOCK_STREAM && arg2 == IPPROTO_IP)
+socket: (arg0 == AF_UNIX && arg1 &? SOCK_STREAM && arg2 == IPPROTO_IP) || (arg0 == AF_INET && arg1 &? SOCK_STREAM && arg2 == IPPROTO_IP) || (arg0 == AF_INET && arg1 &? SOCK_STREAM && arg2 == IPPROTO_TCP)
 fadvise64:1
 connect:1
 recvfrom:1
