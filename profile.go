@@ -103,6 +103,7 @@ type SeccompConf struct {
 	TrainOutput string `json:"train_output"`
 	Whitelist   string
 	Blacklist   string
+	ExtraDefs   []string
 }
 
 type ExternalForwarder struct {
