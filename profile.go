@@ -36,6 +36,8 @@ type Profile struct {
 	Multi bool
 	// Disable mounting of sys and proc inside the sandbox
 	NoSysProc bool
+	// Allow all of etc to be bindmounted in full, mostly used for profile creation
+	AllowEtc bool
 	// Disable bind mounting of default directories (etc,usr,bin,lib,lib64)
 	// Also disables default blacklist items (/sbin, /usr/sbin, /usr/bin/sudo)
 	// Normally not used
@@ -181,6 +183,9 @@ type NetworkProfile struct {
 	// DNS Mode one of: pass, none, dhcp
 	//  Applies to Nettype: bridge only
 	DNSMode DNSMode `json:"dns_mode"`
+
+	// Additional data for the hosts file
+	Hosts string
 }
 
 const defaultProfileDirectory = "/var/lib/oz/cells.d"

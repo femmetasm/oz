@@ -15,11 +15,11 @@ import (
 )
 
 var basicBindDirs = []string{
-	"/bin", "/lib", "/lib64", "/usr", "/etc",
+	"/bin", "/lib", "/lib64", "/usr", // "/etc",
 }
 
 var basicEmptyDirs = []string{
-	"/boot", "/dev", "/home", "/media", "/mnt",
+	"/boot", "/dev", "/home", "/media", "/mnt", //"/etc",
 	"/opt", "/proc", "/root", "/run", "/run/lock", "/run/user",
 	"/sbin", "/srv", "/sys", "/tmp", "/var", "/var/lib", "/var/lib/dbus",
 	"/var/cache", "/var/crash", "/run/resolvconf",
@@ -34,6 +34,9 @@ var basicSymlinks = [][2]string{
 	{"/tmp", "/var/tmp"},
 	{"/run/lock", "/var/lock"},
 	{"/dev/shm", "/run/shm"},
+
+	{"/run/resolvconf/resolv.conf", "/etc/resolv.conf"},
+	{"/proc/self/mounts", "/etc/mtab"},
 }
 
 var deviceSymlinks = [][2]string{
@@ -50,7 +53,9 @@ var basicBlacklist = []string{
 
 	"/usr/sbin", "/sbin",
 
-	"/etc/machine-id", "/etc/shadow", "/etc/shadow-", "/etc/fstab",
+	//"/etc/machine-id",
+	//"/etc/shadow", "/etc/shadow-", "/etc/gshadow", "/etc/gshadow-",
+	//"/etc/fstab",
 	"${PATH}/sudo", "${PATH}/su",
 	"${PATH}/xinput", "${PATH}/strace",
 	"${PATH}/mount", "${PATH}/umount",
@@ -97,7 +102,7 @@ func _makedev(x, y int) int {
 	return (((x) << 8) | (y))
 }
 
-func setupRootfs(fsys *fs.Filesystem, user *user.User, uid, gid uint32, display int, useFullDev bool, log *logging.Logger) error {
+func setupRootfs(fsys *fs.Filesystem, user *user.User, uid, gid uint32, display int, useFullDev bool, log *logging.Logger, etcIncludes []string) error {
 	if err := os.MkdirAll(fsys.Root(), 0755); err != nil {
 		return fmt.Errorf("could not create rootfs path '%s': %v", fsys.Root(), err)
 	}
@@ -115,6 +120,9 @@ func setupRootfs(fsys *fs.Filesystem, user *user.User, uid, gid uint32, display 
 		return fmt.Errorf("failed to set MS_PRIVATE on '%s': %v", fsys.Root(), err)
 	}
 
+	if len(etcIncludes) == 0 {
+		basicBindDirs = append(basicBindDirs, "/etc")
+	}
 	for _, p := range basicBindDirs {
 		if err := fsys.BindPath(p, fs.BindReadOnly, display); err != nil {
 			return fmt.Errorf("failed to bind directory '%s': %v", p, err)
@@ -122,6 +130,9 @@ func setupRootfs(fsys *fs.Filesystem, user *user.User, uid, gid uint32, display 
 	}
 
 	userMountDir := path.Join("/media", user.Username)
+	if len(etcIncludes) > 0 {
+		basicEmptyDirs = append(basicEmptyDirs, "/etc")
+	}
 	basicEmptyDirs = append(basicEmptyDirs, userMountDir)
 	for _, p := range basicEmptyDirs {
 		//log.Debug("Creating empty dir: %s", p)
@@ -132,6 +143,12 @@ func setupRootfs(fsys *fs.Filesystem, user *user.User, uid, gid uint32, display 
 
 	if err := setupMountDirectory(fsys, userMountDir); err != nil {
 		return fmt.Errorf("failed to create mount directory: %v", err)
+	}
+
+	if len(etcIncludes) > 0 {
+		if err := setupEtcIncludes(fsys, etcIncludes, display); err != nil {
+			return fmt.Errorf("failed to bind allowed etc items: %v", err)
+		}
 	}
 
 	basicEmptyUserDirs = append(basicEmptyUserDirs, user.HomeDir)
@@ -197,6 +214,16 @@ func setupRootfs(fsys *fs.Filesystem, user *user.User, uid, gid uint32, display 
 			//log.Warning("Unable to blacklist %s: %v", bl, err)
 		}
 	}
+	return nil
+}
+
+func setupEtcIncludes(fsys *fs.Filesystem, etcIncludes []string, display int) error {
+	for _, inc := range etcIncludes {
+		if err := fsys.BindPath(inc, fs.BindReadOnly|fs.BindIgnore, display); err != nil {
+			return fmt.Errorf("'%s': %v", inc, err)
+		}
+	}
+
 	return nil
 }
 
