@@ -35,6 +35,7 @@ var DefaultEtcIncludes = []string{
 	"/etc/ssl/certs/",
 	"/etc/console-setup/",
 	"/etc/dbus-1/",
+	"/etc/default/locale",
 	"/etc/fonts/",
 	"/etc/gnome/defaults.list",
 	"/etc/group",
@@ -65,7 +66,7 @@ var DefaultEtcIncludes = []string{
 	"/etc/xdg/user-dirs.conf",
 	"/etc/xdg/user-dirs.defaults",
 	"/etc/xpra/",
-	"/etc/X11",
+	"/etc/X11/",
 
 	//"/etc/debian_version",
 	//"/etc/os-release",
