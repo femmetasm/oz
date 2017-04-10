@@ -868,7 +868,7 @@ func (st *initState) setupFilesystem(extra_whitelist []oz.WhitelistItem, extra_b
 		mo.add(st.fs.MountFullDev, st.fs.MountShm)
 	}
 	mo.add( /*st.fs.MountTmp, */ st.fs.MountPts)
-	if !st.profile.NoSysProc {
+	if st.profile.NoSysProc != true {
 		mo.add(st.fs.MountProc, st.fs.MountSys)
 	}
 	return mo.run()

@@ -48,18 +48,19 @@ var deviceSymlinks = [][2]string{
 }
 
 var basicBlacklist = []string{
-	/*"${PATH}/dbus-daemon", "${PATH}/dbus-launch", "${PATH}/pulseaudio",*/
 	"/usr/lib/gvfs",
 
 	"/usr/sbin", "/sbin",
+	"/usr/include", "/usr/lib/klibc", "/usr/share/doc", "/usr/src",
+	"/lib/udev/rules.d", "/lib/firmware", "/lib/modules",
+	"/usr/local/include", "/usr/local/src/",
 
-	//"/etc/machine-id",
-	//"/etc/shadow", "/etc/shadow-", "/etc/gshadow", "/etc/gshadow-",
-	//"/etc/fstab",
 	"${PATH}/sudo", "${PATH}/su",
 	"${PATH}/xinput", "${PATH}/strace",
 	"${PATH}/mount", "${PATH}/umount",
-	"${PATH}/fusermount",
+	"${PATH}/fusermount", "${PATH}/fuser",
+	"${PATH}/kmod", "${PATH}/mknod", "${PATH}/udevadm",
+	"${PATH}/systemd", "${PATH}/systemd-*",
 }
 
 var basicWhiteList = []string{
